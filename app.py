@@ -3,9 +3,27 @@ from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageOps
 import io
 import zipfile
 import random
+import os
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
-st.set_page_config(page_title="InmoTool Pro V6", page_icon="🏠", layout="wide")
+st.set_page_config(page_title="InmoTool Pro V7", page_icon="🏠", layout="wide")
+
+# --- FUNCIONES DE FUENTE (PARA QUE SE VEA PROFESIONAL EN WINDOWS) ---
+def cargar_fuente(tipo, tamano):
+    """Carga Arial o Arial Negrita directamente de Windows para evitar errores."""
+    nombres = []
+    if tipo == "bold":
+        nombres = ["arialbd.ttf", "Arial Bold.ttf", "C:/Windows/Fonts/arialbd.ttf"]
+    else:
+        nombres = ["arial.ttf", "Arial.ttf", "C:/Windows/Fonts/arial.ttf"]
+    
+    for nombre in nombres:
+        try:
+            return ImageFont.truetype(nombre, tamano)
+        except:
+            continue
+    # Si falla todo, usa la default (pero no debería pasar en Windows)
+    return ImageFont.load_default()
 
 # --- FUNCIONES GRÁFICAS (MOTOR DE DISEÑO) ---
 
@@ -32,13 +50,14 @@ def recortar_circulo_con_borde(img, diametro, color_borde, grosor_borde):
 
 def procesar_portada_premium(img_principal, lista_extras, tipo_op, precio, equipamiento, nombre, telefono, correo):
     W, H = 1000, 1400
-    COLOR_FONDO = "#0e7a5b"
-    COLOR_ACENTO = "#f3c623"
+    COLOR_FONDO = "#0e7a5b" # Verde elegante
+    COLOR_ACENTO = "#f3c623" # Amarillo dorado
     COLOR_TEXTO = "white"
     
     lienzo = Image.new('RGB', (W, H), COLOR_FONDO)
     draw = ImageDraw.Draw(lienzo)
 
+    # 1. Foto Principal (Curva)
     img_fachada = img_principal.convert("RGB")
     ALTO_FACHADA = 650
     CURVA = 150
@@ -47,16 +66,15 @@ def procesar_portada_premium(img_principal, lista_extras, tipo_op, precio, equip
     img_fachada.putalpha(mascara)
     lienzo.paste(img_fachada, (0, 0), img_fachada)
 
-    try:
-        font_titulo_grande = ImageFont.truetype("arialbd.ttf", 130)
-        font_titulo_peq = ImageFont.truetype("arial.ttf", 60)
-        font_subtitulo = ImageFont.truetype("arialbd.ttf", 40)
-        font_texto = ImageFont.truetype("arial.ttf", 30)
-        font_precio = ImageFont.truetype("arialbd.ttf", 55)
-        font_contacto = ImageFont.truetype("arial.ttf", 22)
-    except:
-        font_titulo_grande = font_titulo_peq = font_subtitulo = font_texto = font_precio = font_contacto = ImageFont.load_default()
+    # 2. Cargar Fuentes (Usando la función segura)
+    font_titulo_grande = cargar_fuente("bold", 130)
+    font_titulo_peq = cargar_fuente("normal", 60)
+    font_subtitulo = cargar_fuente("bold", 40)
+    font_texto = cargar_fuente("normal", 30)
+    font_precio = cargar_fuente("bold", 55)
+    font_contacto = cargar_fuente("normal", 22)
 
+    # 3. Dibujar Textos
     X_MARGIN = 60
     Y_POS = ALTO_FACHADA - CURVA + 50
 
@@ -65,7 +83,13 @@ def procesar_portada_premium(img_principal, lista_extras, tipo_op, precio, equip
     draw.text((X_MARGIN, Y_POS), f"en {tipo_op.lower()}", font=font_titulo_peq, fill=COLOR_TEXTO)
     
     Y_POS += 120
-    draw.text((X_MARGIN, Y_POS), "Características:", font=font_subtitulo, fill=COLOR_TEXTO, underline=True)
+    draw.text((X_MARGIN, Y_POS), "Características:", font=font_subtitulo, fill=COLOR_TEXTO)
+    
+    # Línea decorativa debajo de "Características"
+    bbox_sub = draw.textbbox((0,0), "Características:", font=font_subtitulo)
+    ancho_sub = bbox_sub[2] - bbox_sub[0]
+    draw.line([(X_MARGIN, Y_POS + 45), (X_MARGIN + ancho_sub, Y_POS + 45)], fill=COLOR_ACENTO, width=3)
+    
     Y_POS += 60
     lineas_equip = equipamiento.split(',')
     for linea in lineas_equip[:5]: 
@@ -74,25 +98,38 @@ def procesar_portada_premium(img_principal, lista_extras, tipo_op, precio, equip
         draw.text((X_MARGIN + 20, Y_POS), texto_linea, font=font_texto, fill=COLOR_TEXTO)
         Y_POS += 45
 
+    # 4. Caja de Precio
     Y_PRECIO = H - 250
     ANCHO_CAJA = 550
     ALTO_CAJA = 100
     draw.rectangle([(X_MARGIN, Y_PRECIO), (X_MARGIN + ANCHO_CAJA, Y_PRECIO + ALTO_CAJA)], fill=COLOR_ACENTO)
     
+    # Centrar precio
     bbox = draw.textbbox((0,0), precio, font=font_precio)
-    x_txt = X_MARGIN + (ANCHO_CAJA - (bbox[2] - bbox[0])) // 2
-    y_txt = Y_PRECIO + (ALTO_CAJA - (bbox[3] - bbox[1])) // 2 - 10
+    ancho_precio = bbox[2] - bbox[0]
+    alto_precio = bbox[3] - bbox[1]
+    x_txt = X_MARGIN + (ANCHO_CAJA - ancho_precio) // 2
+    y_txt = Y_PRECIO + (ALTO_CAJA - alto_precio) // 2 - 10
     draw.text((x_txt, y_txt), precio, font=font_precio, fill="black")
 
+    # 5. Datos de Contacto
     Y_CONTACTO = Y_PRECIO + ALTO_CAJA + 30
     draw.text((X_MARGIN, Y_CONTACTO), f"Asesor: {nombre}", font=font_contacto, fill=COLOR_TEXTO)
     draw.text((X_MARGIN, Y_CONTACTO + 30), f"📞 {telefono} | ✉️ {correo}", font=font_contacto, fill=COLOR_TEXTO)
 
-    config_circulos = [{"pos": (550, 500), "diam": 420}, {"pos": (650, 850), "diam": 350}, {"pos": (500, 1100), "diam": 300}]
-    fotos_para_circulos = lista_extras[:3] if len(lista_extras) >= 3 else lista_extras
-    for i, img_extra in enumerate(fotos_para_circulos):
-        cfg = config_circulos[i]
-        img_circ = recortar_circulo_con_borde(img_extra, cfg["diam"], COLOR_ACENTO, 8)
+    # 6. Círculos con Fotos Extra
+    config_circulos = [
+        {"pos": (550, 500), "diam": 420}, 
+        {"pos": (650, 850), "diam": 350}, 
+        {"pos": (500, 1100), "diam": 300}
+    ]
+    # Tomar fotos extra (si hay menos de 3, repite la última o usa la principal de relleno)
+    fotos_disp = lista_extras if lista_extras else [img_principal]
+    
+    for i, cfg in enumerate(config_circulos):
+        # Usamos módulo % para rotar las fotos si hay pocas
+        img_base = fotos_disp[i % len(fotos_disp)] 
+        img_circ = recortar_circulo_con_borde(img_base, cfg["diam"], COLOR_ACENTO, 8)
         lienzo.paste(img_circ, cfg["pos"], img_circ)
 
     return lienzo
@@ -109,39 +146,25 @@ def procesar_galeria_simple(img):
 # --- GENERADOR DE TEXTOS ---
 
 def generar_textos_virales(tipo, zona, precio, equipamiento, contacto, nombre):
-    
     lista_items = [item.strip() for item in equipamiento.split(',')]
     
-    # Listas de bullets
     bullets_estrellas = "\n".join([f"✨ {item}" for item in lista_items])
     bullets_checks = "\n".join([f"✅ {item}" for item in lista_items])
-    bullets_uni = "\n".join([f"🎓 {item}" for item in lista_items]) # Bullet estudiante
+    bullets_uni = "\n".join([f"🎓 {item}" for item in lista_items])
 
     plantillas = []
-
     # 1. Formal
-    t1 = f"""🏡 {tipo.upper()} DE CASA - ZONA {zona.upper()}\n\n📍 UBICACIÓN PRIVILEGIADA\n💵 {precio}\n\n💠 DISTRIBUCIÓN:\n{bullets_checks}\n\n‼️ SE ACEPTAN CRÉDITOS ‼️\n\nINFORMES:\n📞 {contacto} con {nombre}"""
-    plantillas.append(t1)
-
+    plantillas.append(f"""🏡 {tipo.upper()} DE CASA - ZONA {zona.upper()}\n\n📍 UBICACIÓN PRIVILEGIADA\n💵 {precio}\n\n💠 DISTRIBUCIÓN:\n{bullets_checks}\n\n‼️ SE ACEPTAN CRÉDITOS ‼️\n\nINFORMES:\n📞 {contacto} con {nombre}""")
     # 2. Visual
-    t2 = f"""🌳 Casa en {zona}, ubicación inmejorable\n💲 Precio: {precio}\n\nCaracterísticas:\n{bullets_estrellas}\n\n✨ Espacios amplios\n📲 Citas: {contacto} ({nombre})"""
-    plantillas.append(t2)
-
+    plantillas.append(f"""🌳 Casa en {zona}, ubicación inmejorable\n💲 Precio: {precio}\n\nCaracterísticas:\n{bullets_estrellas}\n\n✨ Espacios amplios\n📲 Citas: {contacto} ({nombre})""")
     # 3. Urgencia
-    t3 = f"""🔥 OPORTUNIDAD EN {zona.upper()} 🔥\n💰 PRECIO: {precio}\n\nTu nuevo hogar:\n{bullets_checks}\n\n🏃‍♂️ ¡Que no te la ganen!\n👉 {contacto}"""
-    plantillas.append(t3)
-
+    plantillas.append(f"""🔥 OPORTUNIDAD EN {zona.upper()} 🔥\n💰 PRECIO: {precio}\n\nTu nuevo hogar:\n{bullets_checks}\n\n🏃‍♂️ ¡Que no te la ganen!\n👉 {contacto}""")
     # 4. Minimalista
-    t4 = f"""📍 {zona} | 💲 {precio}\n🏠 Se {tipo.lower()}:\n\n{bullets_estrellas}\n\nℹ️ Citas: {contacto}"""
-    plantillas.append(t4)
-
+    plantillas.append(f"""📍 {zona} | 💲 {precio}\n🏠 Se {tipo.lower()}:\n\n{bullets_estrellas}\n\nℹ️ Citas: {contacto}""")
     # 5. Emocional
-    t5 = f"""😍 Estrena casa en {zona}\n💎 Inversión: {precio}\n\nDetalles:\n{bullets_estrellas}\n\n🔑 ¡Ven a conocerla!\n📲 {contacto}"""
-    plantillas.append(t5)
-    
-    # 6. ESTUDIANTE / FORÁNEO (NUEVO ESTILO)
-    t6 = f"""🎓 ¡ATENCIÓN ESTUDIANTES / FORÁNEOS! 🎓\n📍 Zona: {zona} (Ideal UACH/Tec)\n\n💲 Renta: {precio}\n\n¿Buscas depa o casa cerca de la uni? Checa esto:\n{bullets_uni}\n\n✅ Transporte cercano\n✅ Zona segura\n✅ Ideal para Roomies\n\n🍕 ¡Agenda tu visita entre clases!\nManda WhatsApp al: 📲 {contacto} con {nombre}"""
-    plantillas.append(t6)
+    plantillas.append(f"""😍 Estrena casa en {zona}\n💎 Inversión: {precio}\n\nDetalles:\n{bullets_estrellas}\n\n🔑 ¡Ven a conocerla!\n📲 {contacto}""")
+    # 6. Estudiante
+    plantillas.append(f"""🎓 ¡ATENCIÓN ESTUDIANTES! 🎓\n📍 Zona: {zona} (Ideal UACH/Tec)\n\n💲 Renta: {precio}\n\n¿Buscas depa o casa cerca de la uni?\n{bullets_uni}\n\n✅ Transporte cercano\n✅ Zona segura\n✅ Ideal para Roomies\n\n🍕 ¡Agenda tu visita!\n📲 {contacto} con {nombre}""")
 
     return plantillas
 
@@ -153,7 +176,7 @@ with st.sidebar:
     tel_ag = st.text_input("Tel/WhatsApp:", value="614 112 8338")
     email_ag = st.text_input("Email:", value="elena@email.com")
 
-st.title("🏠 InmoTool Pro V6")
+st.title("🏠 InmoTool Pro V7")
 st.markdown("Generador de Marketing Inmobiliario Todo-en-Uno.")
 
 tab1, tab2 = st.tabs(["📸 Diseño Gráfico", "✍️ Textos"])
@@ -165,46 +188,51 @@ with tab1:
         precio_in = st.text_input("Precio:", value="$1,950,000 MXN")
     with col2:
         zona_in = st.text_input("Zona:", value="Cordilleras / UACH")
-        equip_in = st.text_area("Características:", value="3 Recámaras, Cerca de la UACH, Cocina integral, Parada de camión cerca")
+        equip_in = st.text_area("Características (separadas por coma):", value="3 Recámaras, Cerca de la UACH, Cocina integral, Cochera doble")
 
     st.markdown("---")
-    
-    # CAMPO NUEVO: NOMBRE DEL ARCHIVO
-    st.info("👇 Escribe cómo quieres que se llame el archivo descargable")
-    nombre_archivo = st.text_input("Nombre del archivo (sin .zip):", value="Casa_Cordilleras_ClienteX")
-    
+    st.info("👇 Nombre del archivo para descargar")
+    nombre_archivo = st.text_input("Nombre del archivo:", value="Casa_Cordilleras")
     st.markdown("---")
 
     col_up1, col_up2 = st.columns(2)
     with col_up1:
         st.subheader("1. Fachada Principal")
-        archivo_principal = st.file_uploader("Sube aquí la fachada", type=['jpg', 'png', 'jpeg'], key="main")
+        archivo_principal = st.file_uploader("Sube la fachada (Imagen Principal)", type=['jpg', 'png', 'jpeg'], key="main")
     with col_up2:
         st.subheader("2. Interiores")
-        archivos_extras = st.file_uploader("Sube aquí el resto", accept_multiple_files=True, type=['jpg', 'png', 'jpeg'], key="extras")
+        archivos_extras = st.file_uploader("Sube el resto (Para los círculos)", accept_multiple_files=True, type=['jpg', 'png', 'jpeg'], key="extras")
 
     if st.button("🚀 Generar Imágenes"):
-        if not archivo_principal or not archivos_extras:
-            st.error("⚠️ Sube al menos la fachada y una foto extra.")
+        if not archivo_principal:
+            st.error("⚠️ Por favor sube al menos la Foto Principal.")
         else:
-            with st.spinner('Diseñando...'):
+            with st.spinner('Creando diseño profesional...'):
                 zip_buffer = io.BytesIO()
+                
+                # Cargar imágenes
                 img_p = Image.open(archivo_principal)
-                imgs_e = [Image.open(f) for f in archivos_extras]
+                
+                # Manejo de extras: si no sube nada, usamos la principal para que no falle
+                if archivos_extras:
+                    imgs_e = [Image.open(f) for f in archivos_extras]
+                else:
+                    imgs_e = [img_p] # Fallback
+                
                 imgs_para_circulos = imgs_e.copy()
                 random.shuffle(imgs_para_circulos)
-                
+
+                # --- GENERAR PORTADA ---
+                img_portada = procesar_portada_premium(img_p, imgs_para_circulos, tipo_op, precio_in, equip_in, nombre_ag, tel_ag, email_ag)
+
+                # --- PREPARAR ZIP ---
                 with zipfile.ZipFile(zip_buffer, "w") as zf:
-                    # Portada
-                    img_portada = procesar_portada_premium(img_p, imgs_para_circulos, tipo_op, precio_in, equip_in, nombre_ag, tel_ag, email_ag)
+                    # Guardar Portada
                     buf = io.BytesIO()
                     img_portada.save(buf, format='JPEG', quality=95)
                     zf.writestr("01_PORTADA_PREMIUM.jpg", buf.getvalue())
                     
-                    st.success("¡Diseño listo!")
-                    st.image(img_portada, use_container_width=True)
-                    
-                    # Galería
+                    # Guardar Galería Limpia
                     buf_f = io.BytesIO()
                     procesar_galeria_simple(img_p).save(buf_f, format='JPEG')
                     zf.writestr("02_fachada.jpg", buf_f.getvalue())
@@ -213,22 +241,34 @@ with tab1:
                         buf_e = io.BytesIO()
                         procesar_galeria_simple(img).save(buf_e, format='JPEG')
                         zf.writestr(f"{i:02d}_interior.jpg", buf_e.getvalue())
-                
-                # USAMOS EL NOMBRE PERSONALIZADO
+
+                # --- VISTA PREVIA (¡AQUÍ ESTÁ!) ---
+                st.success("¡Diseño generado con éxito!")
+                st.subheader("👀 Vista Previa:")
+                # Usamos use_container_width=True que es el estándar moderno
+                st.image(img_portada, caption="Portada Generada", use_container_width=True)
+
+                # --- BOTÓN DE DESCARGA ---
                 nombre_final = f"{nombre_archivo}.zip" if nombre_archivo else "Pack_Inmobiliario.zip"
                 if not nombre_final.endswith(".zip"): nombre_final += ".zip"
 
-                st.download_button(f"📥 Descargar {nombre_final}", data=zip_buffer.getvalue(), file_name=nombre_final, mime="application/zip", type="primary")
+                st.download_button(
+                    label=f"📥 Descargar {nombre_final}",
+                    data=zip_buffer.getvalue(),
+                    file_name=nombre_final,
+                    mime="application/zip",
+                    type="primary"
+                )
 
 with tab2:
     st.header("Generador de Textos")
     if st.button("✨ Generar Descripciones"):
         variaciones = generar_textos_virales(tipo_op, zona_in, precio_in, equip_in, tel_ag, nombre_ag)
         col_t1, col_t2 = st.columns(2)
-        nombres_estilos = ['Formal', 'Visual', 'Urgencia', 'Minimal', 'Emocional', '🎓 ESTUDIANTE / FORÁNEO']
+        titulos = ['Formal', 'Visual', 'Urgencia', 'Minimal', 'Emocional', '🎓 ESTUDIANTE']
         
         for i, texto in enumerate(variaciones):
-            donde_mostrar = col_t1 if i % 2 == 0 else col_t2
-            with donde_mostrar:
-                st.subheader(f"Opción {i+1}: {nombres_estilos[i]}")
-                st.text_area(f"copy_{i}", value=texto, height=300, label_visibility="collapsed")
+            donde = col_t1 if i % 2 == 0 else col_t2
+            with donde:
+                st.subheader(f"Opción {i+1}: {titulos[i]}")
+                st.text_area(f"txt_{i}", value=texto, height=250)
